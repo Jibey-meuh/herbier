@@ -29,10 +29,10 @@ def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temper
         )
         return response.choices[0].message.content
     except Exception as e:
-        # Fallback si le modèle principal échoue
+        # Fallback sur un modèle alternatif
         try:
             response = client.chat.completions.create(
-                model="llama-3.2-3b-preview",  # Modèle de secours
+                model="llama-3.2-3b-preview",
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -59,27 +59,13 @@ def extract_json(text):
             return None
     return None
 
-def get_location_suggestions(partial_name):
-    """Retourne une liste de suggestions de pays ou villes basée sur la saisie partielle."""
-    system = """Tu es un assistant géographique. L'utilisateur tape un début de nom de lieu (pays ou ville).
-    Réponds UNIQUEMENT avec un tableau JSON de 5 suggestions de noms de lieux (pays ou ville) qui commencent par cette saisie ou y ressemblent.
-    Exemple : ["France", "Finlande", "Fidji"].
-    Si peu de correspondances, renvoie moins de 5."""
-    user = f"Saisie partielle : {partial_name}"
-    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=200)
-    if response:
-        suggestions = extract_json(response)
-        if suggestions and isinstance(suggestions, list):
-            return [s for s in suggestions if isinstance(s, str)]
-    return []
-
-def search_plants(location, maux):
-    """Recherche 5 plantes médicinales adaptées au lieu, aux maux et à la saison actuelle."""
+def search_plants(country, maux):
+    """Recherche 5 plantes médicinales adaptées au pays, aux maux et à la saison actuelle."""
     today = datetime.now().strftime("%d/%m/%Y")
     system = """Tu es un expert en phytothérapie et botanique.
-    L'utilisateur indique un lieu (pays ou ville) et une liste de maux.
-    Tu dois déterminer la saison actuelle dans ce lieu à la date donnée, puis identifier exactement 5 plantes médicinales qui :
-    - poussent ou sont récoltées dans cette région pendant cette saison,
+    L'utilisateur indique un pays et une liste de maux.
+    Tu dois déterminer la saison actuelle dans ce pays à la date donnée, puis identifier exactement 5 plantes médicinales qui :
+    - poussent ou sont récoltées dans ce pays pendant cette saison,
     - sont traditionnellement utilisées pour les maux indiqués.
     Réponds UNIQUEMENT avec un tableau JSON d'objets, chaque objet ayant les clés :
     - "nom_commun" (string)
@@ -89,7 +75,7 @@ def search_plants(location, maux):
     Si tu ne trouves pas 5 plantes, renvoie celles que tu as, mais essaie d'en trouver 5.
     Si aucune, renvoie [].
     """
-    user = f"Date d'aujourd'hui : {today}\nLieu : {location}\nMaux : {', '.join(maux)}"
+    user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
     response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=800)
     if response:
         plants = extract_json(response)
@@ -98,7 +84,7 @@ def search_plants(location, maux):
             for p in plants:
                 if isinstance(p, dict) and all(k in p for k in ["nom_commun", "nom_scientifique", "saison", "description_courte"]):
                     valid_plants.append(p)
-            return valid_plants[:5]  # limite à 5
+            return valid_plants[:5]
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
@@ -148,13 +134,66 @@ def get_wikimedia_image(nom_scientifique):
     return None
 
 # ------------------------------
+# Listes de pays et symptômes
+# ------------------------------
+# Liste des pays du monde (ordre alphabétique)
+PAYS = [
+    "Afghanistan", "Afrique du Sud", "Albanie", "Algérie", "Allemagne", "Andorre", "Angola",
+    "Antigua-et-Barbuda", "Arabie saoudite", "Argentine", "Arménie", "Australie", "Autriche",
+    "Azerbaïdjan", "Bahamas", "Bahreïn", "Bangladesh", "Barbade", "Belgique", "Belize",
+    "Bénin", "Bhoutan", "Biélorussie", "Birmanie", "Bolivie", "Bosnie-Herzégovine",
+    "Botswana", "Brésil", "Brunei", "Bulgarie", "Burkina Faso", "Burundi", "Cambodge",
+    "Cameroun", "Canada", "Cap-Vert", "Chili", "Chine", "Chypre", "Colombie", "Comores",
+    "Congo", "Corée du Nord", "Corée du Sud", "Costa Rica", "Côte d'Ivoire", "Croatie",
+    "Cuba", "Danemark", "Djibouti", "Dominique", "Égypte", "Émirats arabes unis",
+    "Équateur", "Érythrée", "Espagne", "Estonie", "Eswatini", "États-Unis", "Éthiopie",
+    "Fidji", "Finlande", "France", "Gabon", "Gambie", "Géorgie", "Ghana", "Grèce",
+    "Grenade", "Guatemala", "Guinée", "Guinée-Bissau", "Guinée équatoriale", "Guyana",
+    "Haïti", "Honduras", "Hongrie", "Inde", "Indonésie", "Irak", "Iran", "Irlande",
+    "Islande", "Israël", "Italie", "Jamaïque", "Japon", "Jordanie", "Kazakhstan",
+    "Kenya", "Kirghizistan", "Kiribati", "Koweït", "Laos", "Lesotho", "Lettonie",
+    "Liban", "Liberia", "Libye", "Liechtenstein", "Lituanie", "Luxembourg",
+    "Macédoine du Nord", "Madagascar", "Malaisie", "Malawi", "Maldives", "Mali",
+    "Malte", "Maroc", "Marshall", "Maurice", "Mauritanie", "Mexique", "Micronésie",
+    "Moldavie", "Monaco", "Mongolie", "Monténégro", "Mozambique", "Namibie", "Nauru",
+    "Népal", "Nicaragua", "Niger", "Nigeria", "Norvège", "Nouvelle-Zélande", "Oman",
+    "Ouganda", "Ouzbékistan", "Pakistan", "Palaos", "Panama", "Papouasie-Nouvelle-Guinée",
+    "Paraguay", "Pays-Bas", "Pérou", "Philippines", "Pologne", "Portugal", "Qatar",
+    "République centrafricaine", "République dominicaine", "République tchèque",
+    "Roumanie", "Royaume-Uni", "Russie", "Rwanda", "Saint-Kitts-et-Nevis",
+    "Saint-Marin", "Saint-Vincent-et-les-Grenadines", "Sainte-Lucie", "Salomon",
+    "Salvador", "Samoa", "São Tomé-et-Principe", "Sénégal", "Serbie", "Seychelles",
+    "Sierra Leone", "Singapour", "Slovaquie", "Slovénie", "Somalie", "Soudan",
+    "Soudan du Sud", "Sri Lanka", "Suède", "Suisse", "Suriname", "Syrie",
+    "Tadjikistan", "Tanzanie", "Tchad", "Thaïlande", "Timor oriental", "Togo",
+    "Tonga", "Trinité-et-Tobago", "Tunisie", "Turkménistan", "Turquie", "Tuvalu",
+    "Ukraine", "Uruguay", "Vanuatu", "Vatican", "Venezuela", "Viêt Nam", "Yémen",
+    "Zambie", "Zimbabwe"
+]
+
+# Liste des symptômes courants traités par la phytothérapie
+SYMPTOMES = [
+    "Ballonnements", "Digestion difficile", "Constipation", "Diarrhée", "Nausées",
+    "Reflux gastrique", "Syndrome de l'intestin irritable", "Stress", "Anxiété",
+    "Dépression légère", "Insomnie", "Fatigue chronique", "Manque d'énergie",
+    "Maux de tête", "Migraine", "Douleurs articulaires", "Arthrite", "Douleurs musculaires",
+    "Règles douloureuses", "Syndrome prémenstruel (SPM)", "Ménopause", "Problèmes de prostate",
+    "Problèmes de peau (acné, eczéma)", "Infections urinaires", "Problèmes respiratoires",
+    "Toux", "Rhume", "Grippe", "Allergies", "Hypertension", "Cholestérol",
+    "Diabète (soutien)", "Problèmes de foie", "Problèmes de vésicule biliaire",
+    "Problèmes rénaux", "Défenses immunitaires faibles", "Inflammation",
+    "Problèmes circulatoires", "Varices", "Hémorroïdes", "Perte de poids",
+    "Troubles de la concentration", "Mémoire", "Nervosité", "Palpitations"
+]
+
+# ------------------------------
 # Initialisation de l'état de session
 # ------------------------------
 if 'page' not in st.session_state:
-    st.session_state.page = 'search'  # search, symptoms, plants, plant_detail
+    st.session_state.page = 'search'
 
-if 'location' not in st.session_state:
-    st.session_state.location = ""
+if 'country' not in st.session_state:
+    st.session_state.country = None
 
 if 'maux_choisis' not in st.session_state:
     st.session_state.maux_choisis = []
@@ -165,9 +204,6 @@ if 'plants' not in st.session_state:
 if 'selected_plant' not in st.session_state:
     st.session_state.selected_plant = None
 
-if 'suggestions' not in st.session_state:
-    st.session_state.suggestions = []
-
 # ------------------------------
 # Navigation helpers
 # ------------------------------
@@ -176,86 +212,46 @@ def go_to_page(page_name):
     st.rerun()
 
 # ------------------------------
-# PAGE 1 : Recherche du lieu
+# PAGE 1 : Sélection du pays
 # ------------------------------
 if st.session_state.page == 'search':
     st.title("🌿 Herbier médicinal intelligent")
-    st.markdown("### Étape 1 : Où vous trouvez-vous ?")
-    st.write("Commencez à taper un pays ou une ville, puis choisissez dans les suggestions.")
-
-    # Champ de saisie
-    location_input = st.text_input("Lieu (pays ou ville)", value=st.session_state.location)
-
-    # Autocomplétion : si au moins 2 caractères, on propose des suggestions
-    if len(location_input) >= 2:
-        # On ne déclenche la recherche que si l'utilisateur n'a pas encore validé ou si la saisie a changé
-        if st.session_state.get('last_input') != location_input:
-            st.session_state.last_input = location_input
-            with st.spinner("Recherche de suggestions..."):
-                suggestions = get_location_suggestions(location_input)
-                st.session_state.suggestions = suggestions
-    else:
-        st.session_state.suggestions = []
-
-    # Affichage des suggestions sous forme de boutons
-    if st.session_state.suggestions:
-        st.write("Suggestions :")
-        cols = st.columns(min(len(st.session_state.suggestions), 5))
-        for idx, sugg in enumerate(st.session_state.suggestions):
-            col = cols[idx % len(cols)]
-            if col.button(sugg, key=f"sugg_{idx}"):
-                st.session_state.location = sugg
-                st.session_state.suggestions = []
-                go_to_page('symptoms')
-
-    # Bouton pour valider manuellement
-    if st.button("Valider ce lieu", type="primary"):
-        if location_input.strip():
-            st.session_state.location = location_input.strip()
-            st.session_state.suggestions = []
-            go_to_page('symptoms')
-        else:
-            st.warning("Veuillez saisir un lieu.")
+    st.markdown("### Étape 1 : Dans quel pays vous trouvez-vous ?")
+    
+    # Liste déroulante des pays
+    country = st.selectbox("Sélectionnez un pays", PAYS, index=0)
+    
+    if st.button("Continuer ➜", type="primary"):
+        st.session_state.country = country
+        go_to_page('symptoms')
 
 # ------------------------------
-# PAGE 2 : Sélection des maux
+# PAGE 2 : Sélection des symptômes
 # ------------------------------
 elif st.session_state.page == 'symptoms':
     st.title("🌿 Herbier médicinal intelligent")
-    st.markdown(f"### Étape 2 : Quels maux présentez-vous ?")
-    st.write(f"Lieu sélectionné : **{st.session_state.location}**")
-
-    maux_options = [
-        "Ballonnement", 
-        "Régulation hormonale SPM", 
-        "Sommeil", 
-        "Stress", 
-        "Digestion difficile", 
-        "Fatigue", 
-        "Anxiété", 
-        "Douleurs articulaires",
-        "Maux de tête",
-        "Problèmes de peau"
-    ]
-    maux_choisis = st.multiselect("Sélectionnez un ou plusieurs maux", maux_options, default=st.session_state.maux_choisis)
-
+    st.markdown(f"### Étape 2 : Quels symptômes présentez-vous ?")
+    st.write(f"Pays sélectionné : **{st.session_state.country}**")
+    
+    maux_choisis = st.multiselect("Sélectionnez un ou plusieurs symptômes", SYMPTOMES, default=st.session_state.maux_choisis)
+    
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Retour au lieu"):
+        if st.button("← Retour au pays"):
             go_to_page('search')
     with col2:
         if st.button("Rechercher les plantes 🔍", type="primary"):
             if not maux_choisis:
-                st.warning("Veuillez sélectionner au moins un mal.")
+                st.warning("Veuillez sélectionner au moins un symptôme.")
             else:
                 st.session_state.maux_choisis = maux_choisis
                 with st.spinner("Recherche des plantes adaptées à la saison..."):
-                    plants = search_plants(st.session_state.location, maux_choisis)
+                    plants = search_plants(st.session_state.country, maux_choisis)
                     st.session_state.plants = plants
                     if plants:
                         go_to_page('plants')
                     else:
-                        st.error("Aucune plante trouvée. Essayez d'autres maux ou un autre lieu.")
+                        st.error("Aucune plante trouvée. Essayez d'autres symptômes ou un autre pays.")
 
 # ------------------------------
 # PAGE 3 : Liste des 5 plantes
@@ -263,11 +259,11 @@ elif st.session_state.page == 'symptoms':
 elif st.session_state.page == 'plants':
     st.title("🌿 Herbier médicinal intelligent")
     st.markdown(f"### Étape 3 : Plantes adaptées à vos besoins")
-    st.write(f"Lieu : **{st.session_state.location}** | Maux : {', '.join(st.session_state.maux_choisis)}")
-
+    st.write(f"Pays : **{st.session_state.country}** | Symptômes : {', '.join(st.session_state.maux_choisis)}")
+    
     if not st.session_state.plants:
         st.info("Aucune plante trouvée. Revenez en arrière pour modifier vos critères.")
-        if st.button("← Retour aux maux"):
+        if st.button("← Retour aux symptômes"):
             go_to_page('symptoms')
     else:
         st.write("Voici 5 plantes qui pourraient vous aider :")
@@ -281,8 +277,8 @@ elif st.session_state.page == 'plants':
                 st.write(f"**{plant.get('nom_commun', 'N/A')}** (*{plant.get('nom_scientifique', '')}*)")
                 st.caption(f"Saison : {plant.get('saison', 'N/A')}")
                 st.write(plant.get('description_courte', ''))
-
-        if st.button("← Retour aux maux"):
+        
+        if st.button("← Retour aux symptômes"):
             go_to_page('symptoms')
 
 # ------------------------------
@@ -297,14 +293,14 @@ elif st.session_state.page == 'plant_detail':
     else:
         st.title(f"🌱 {plant.get('nom_commun', 'Plante')}")
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
-
+        
         # Image
         image_url = get_wikimedia_image(plant.get('nom_scientifique', ''))
         if image_url:
             st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
         else:
             st.write("Image non disponible pour cette plante.")
-
+        
         # Fiche détaillée
         with st.spinner("Génération de la fiche détaillée..."):
             fiche = get_plant_details(plant.get('nom_commun', ''), plant.get('nom_scientifique', ''))
@@ -312,6 +308,6 @@ elif st.session_state.page == 'plant_detail':
                 st.markdown(fiche)
             else:
                 st.error("Impossible de générer la fiche.")
-
+        
         if st.button("← Retour à la liste des plantes"):
             go_to_page('plants')
