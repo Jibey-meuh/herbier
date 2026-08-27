@@ -15,7 +15,7 @@ client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 # Fonctions utilitaires
 # ------------------------------
 
-def ask_groq(system_prompt, user_prompt, model="llama-3.1-8b-instant", temperature=0.7, max_tokens=1500):
+def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=1500):
     """Envoie une requête à l'API Groq et retourne la réponse texte."""
     try:
         response = client.chat.completions.create(
