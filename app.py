@@ -109,16 +109,30 @@ Utilise un ton professionnel et accessible."""
     return response if response else "Fiche non disponible."
 
 def get_plant_image(nom_scientifique, nom_commun=""):
-    """Récupère l'image d'une plante via Openverse puis Wikipedia."""
+    """Récupère l'image depuis Wikiphyto, puis Openverse, puis Wikipedia."""
+    def try_wikiphyto(query):
+        # Construit l'URL probable de la page Wikiphyto
+        slug = query.replace(" ", "_")
+        url = f"https://www.wikiphyto.org/wiki/{slug}"
+        try:
+            resp = requests.get(url, timeout=8)
+            if resp.status_code == 200:
+                soup = BeautifulSoup(resp.text, 'html.parser')
+                img = soup.find('img', class_='thumbimage') or soup.find('img', class_='mw-file-element') or soup.find('img')
+                if img and img.get('src'):
+                    src = img['src']
+                    if src.startswith('//'):
+                        src = 'https:' + src
+                    return src
+        except:
+            pass
+        return None
+
     def try_openverse(query):
+        # comme avant
         try:
             url = "https://api.openverse.org/v1/images/"
-            params = {
-                "q": query,
-                "license_type": "commercial",  # images réutilisables
-                "per_page": 1,
-                "page": 1
-            }
+            params = {"q": query, "license_type": "commercial", "per_page": 1}
             resp = requests.get(url, params=params, timeout=8).json()
             results = resp.get("results", [])
             if results:
@@ -128,16 +142,11 @@ def get_plant_image(nom_scientifique, nom_commun=""):
         return None
 
     def try_wikipedia(query):
+        # comme avant
         for lang in ["fr", "en"]:
             try:
                 url = f"https://{lang}.wikipedia.org/w/api.php"
-                params = {
-                    "action": "query",
-                    "titles": query,
-                    "prop": "pageimages",
-                    "format": "json",
-                    "pithumbsize": 500
-                }
+                params = {"action": "query", "titles": query, "prop": "pageimages", "format": "json", "pithumbsize": 500}
                 resp = requests.get(url, params=params, timeout=8).json()
                 pages = resp.get("query", {}).get("pages", {})
                 for page in pages.values():
@@ -147,25 +156,33 @@ def get_plant_image(nom_scientifique, nom_commun=""):
                 continue
         return None
 
-    # 1. Openverse avec nom scientifique
+    # 1. Wikiphyto avec nom commun (le plus pertinent pour ce site)
+    if nom_commun:
+        img = try_wikiphyto(nom_commun)
+        if img:
+            return img
+
+    # 2. Wikiphyto avec nom scientifique (parfois présent)
+    if nom_scientifique:
+        img = try_wikiphyto(nom_scientifique)
+        if img:
+            return img
+
+    # 3. Openverse
     if nom_scientifique:
         img = try_openverse(nom_scientifique)
         if img:
             return img
-
-    # 2. Openverse avec nom commun
     if nom_commun:
         img = try_openverse(nom_commun)
         if img:
             return img
 
-    # 3. Wikipedia (FR puis EN) avec nom scientifique
+    # 4. Wikipedia
     if nom_scientifique:
         img = try_wikipedia(nom_scientifique)
         if img:
             return img
-
-    # 4. Wikipedia avec nom commun
     if nom_commun:
         img = try_wikipedia(nom_commun)
         if img:
