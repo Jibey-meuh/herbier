@@ -109,6 +109,46 @@ Utilise un ton professionnel et accessible."""
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique, nom_commun=""):
+    """Récupère l'image de la plante via Wikipedia, avec repli sur Commons."""
+    def try_wikipedia(query):
+        try:
+            # API Wikipedia pour obtenir l'image principale
+            url = "https://fr.wikipedia.org/w/api.php"
+            params = {
+                "action": "query",
+                "titles": query,
+                "prop": "pageimages",
+                "format": "json",
+                "pithumbsize": 500
+            }
+            resp = requests.get(url, params=params, timeout=10).json()
+            pages = resp.get("query", {}).get("pages", {})
+            for page in pages.values():
+                if "thumbnail" in page:
+                    return page["thumbnail"]["source"]
+        except:
+            pass
+        return None
+
+    # 1. Essayer avec le nom scientifique (page exacte)
+    if nom_scientifique:
+        img = try_wikipedia(nom_scientifique)
+        if img:
+            return img
+
+    # 2. Essayer avec le nom commun
+    if nom_commun:
+        img = try_wikipedia(nom_commun)
+        if img:
+            return img
+
+    # 3. Essayer avec nom commun + " (plante)"
+    if nom_commun:
+        img = try_wikipedia(nom_commun + " (plante)")
+        if img:
+            return img
+
+    # 4. Repli : recherche sur Commons (ancienne méthode)
     urls = []
     if nom_scientifique:
         urls.append(nom_scientifique)
@@ -146,7 +186,7 @@ def get_wikimedia_image(nom_scientifique, nom_commun=""):
         except:
             continue
 
-    # Image de remplacement fiable
+    # 5. Placeholder final
     return "https://placehold.co/400x300.png?text=Plante+médicinale"
 
 # ------------------------------
