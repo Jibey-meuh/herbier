@@ -12,55 +12,30 @@ st.set_page_config(page_title="Herbier médicinal intelligent", layout="wide")
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
 # ------------------------------
-# Modèles Groq disponibles (selon ta liste)
+# Modèle Groq unique (le plus puissant)
 # ------------------------------
-# Pour les tâches simples (suggestions, listes)
-MODELE_RAPIDE = "qwen/qwen3.6-27b"
-
-# Pour les tâches complexes (recherche de plantes, fiches détaillées)
-MODELE_PUISSANT = "openai/gpt-oss-120b"
-
-# Modèle de secours
-MODELE_SECOURS = "openai/gpt-oss-20b"
-
-# Liste complète pour essai en cascade
-MODELES = [
-    MODELE_PUISSANT,
-    MODELE_RAPIDE,
-    MODELE_SECOURS,
-    "qwen/qwen3.8-27b",
-    "allam-2-7b"
-]
+MODELE_UNIQUE = "openai/gpt-oss-120b"
 
 # ------------------------------
 # Fonctions utilitaires
 # ------------------------------
 
-def ask_groq(system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=1500):
-    """Envoie une requête à l'API Groq en essayant plusieurs modèles."""
-    models_to_try = [model] if model else MODELES
-    last_error = None
-    
-    for m in models_to_try:
-        try:
-            response = client.chat.completions.create(
-                model=m,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            last_error = e
-            continue
-    
-    # Si tous échouent, afficher l'erreur
-    if last_error:
-        st.error(f"Erreur API Groq : {last_error}")
-    return None
+def ask_groq(system_prompt, user_prompt, max_tokens=1500, temperature=0.7):
+    """Envoie une requête à l'API Groq avec le modèle unique."""
+    try:
+        response = client.chat.completions.create(
+            model=MODELE_UNIQUE,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Erreur API Groq : {e}")
+        return None
 
 def extract_json(text):
     """Extrait le premier bloc JSON d'un texte, même avec du texte autour."""
@@ -103,7 +78,7 @@ def search_plants(country, maux):
     Ne mets aucun texte avant ou après le JSON.
     """
     user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
-    response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=800)
+    response = ask_groq(system, user, max_tokens=800)
     if response:
         plants = extract_json(response)
         if plants is not None and isinstance(plants, list):
@@ -111,15 +86,14 @@ def search_plants(country, maux):
             for p in plants:
                 if isinstance(p, dict) and all(k in p for k in ["nom_commun", "nom_scientifique", "saison", "description_courte"]):
                     valid_plants.append(p)
-            # Limiter à 5
             return valid_plants[:5]
         else:
-            # Afficher la réponse brute pour debug (à retirer en prod)
+            # Afficher la réponse brute pour debug (peut être retiré en prod)
             st.write("Réponse brute de Groq :", response)
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
-    """Génère une fiche détaillée pour une plante donnée."""
+    """Génère une fiche détaillée pour une plante donnée, avec liens en premier."""
     system = """Tu es un botaniste et phytothérapeute expérimenté.
 Fournis une fiche complète sur la plante indiquée, structurée en Markdown.
 **IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens vers des sites de phytothérapie réputés (par exemple Wikipédia, PasseportSanté, Doctissimo, etc.). Chaque lien doit être sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
@@ -131,11 +105,11 @@ Ensuite, ajoute les sections suivantes dans cet ordre :
 - **Précautions d'emploi**.
 Utilise un ton professionnel et accessible."""
     user = f"Nom commun : {nom_commun}\nNom scientifique : {nom_scientifique}"
-    response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=1500)
+    response = ask_groq(system, user, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique, nom_commun=""):
-    """Récupère une image libre de droits depuis Wikimedia Commons, avec repli sur le nom commun."""
+    """Récupère une image libre de droits depuis Wikimedia Commons, avec repli."""
     urls = []
     if nom_scientifique:
         urls.append(nom_scientifique)
@@ -179,7 +153,6 @@ def get_wikimedia_image(nom_scientifique, nom_commun=""):
 # ------------------------------
 # Listes de pays et symptômes
 # ------------------------------
-# Liste des pays du monde (ordre alphabétique)
 PAYS = [
     "Afghanistan", "Afrique du Sud", "Albanie", "Algérie", "Allemagne", "Andorre", "Angola",
     "Antigua-et-Barbuda", "Arabie saoudite", "Argentine", "Arménie", "Australie", "Autriche",
@@ -214,7 +187,6 @@ PAYS = [
     "Zambie", "Zimbabwe"
 ]
 
-# Liste des symptômes courants traités par la phytothérapie
 SYMPTOMES = [
     "Ballonnements", "Digestion difficile", "Constipation", "Diarrhée", "Nausées",
     "Reflux gastrique", "Syndrome de l'intestin irritable", "Stress", "Anxiété",
@@ -234,22 +206,15 @@ SYMPTOMES = [
 # ------------------------------
 if 'page' not in st.session_state:
     st.session_state.page = 'search'
-
 if 'country' not in st.session_state:
     st.session_state.country = None
-
 if 'maux_choisis' not in st.session_state:
     st.session_state.maux_choisis = []
-
 if 'plants' not in st.session_state:
     st.session_state.plants = []
-
 if 'selected_plant' not in st.session_state:
     st.session_state.selected_plant = None
 
-# ------------------------------
-# Navigation helpers
-# ------------------------------
 def go_to_page(page_name):
     st.session_state.page = page_name
     st.rerun()
@@ -260,9 +225,7 @@ def go_to_page(page_name):
 if st.session_state.page == 'search':
     st.title("🌿 Herbier médicinal intelligent")
     st.markdown("### Étape 1 : Dans quel pays vous trouvez-vous ?")
-    
     country = st.selectbox("Sélectionnez un pays", PAYS, index=0)
-    
     if st.button("Continuer ➜", type="primary"):
         st.session_state.country = country
         go_to_page('symptoms')
@@ -274,9 +237,7 @@ elif st.session_state.page == 'symptoms':
     st.title("🌿 Herbier médicinal intelligent")
     st.markdown(f"### Étape 2 : Quels symptômes présentez-vous ?")
     st.write(f"Pays sélectionné : **{st.session_state.country}**")
-    
     maux_choisis = st.multiselect("Sélectionnez un ou plusieurs symptômes", SYMPTOMES, default=st.session_state.maux_choisis)
-    
     col1, col2 = st.columns(2)
     with col1:
         if st.button("← Retour au pays"):
@@ -287,7 +248,7 @@ elif st.session_state.page == 'symptoms':
                 st.warning("Veuillez sélectionner au moins un symptôme.")
             else:
                 st.session_state.maux_choisis = maux_choisis
-                with st.spinner("Recherche des plantes adaptées à la saison..."):
+                with st.spinner("Recherche des plantes adaptées..."):
                     plants = search_plants(st.session_state.country, maux_choisis)
                     st.session_state.plants = plants
                     if plants:
@@ -296,19 +257,18 @@ elif st.session_state.page == 'symptoms':
                         st.error("Aucune plante trouvée. Essayez d'autres symptômes ou un autre pays.")
 
 # ------------------------------
-# PAGE 3 : Liste des 5 plantes
+# PAGE 3 : Liste des plantes
 # ------------------------------
 elif st.session_state.page == 'plants':
     st.title("🌿 Herbier médicinal intelligent")
     st.markdown(f"### Étape 3 : Plantes adaptées à vos besoins")
     st.write(f"Pays : **{st.session_state.country}** | Symptômes : {', '.join(st.session_state.maux_choisis)}")
-    
     if not st.session_state.plants:
         st.info("Aucune plante trouvée. Revenez en arrière pour modifier vos critères.")
         if st.button("← Retour aux symptômes"):
             go_to_page('symptoms')
     else:
-        st.write("Voici 5 plantes qui pourraient vous aider :")
+        st.write("Voici les plantes qui pourraient vous aider :")
         for i, plant in enumerate(st.session_state.plants):
             col1, col2 = st.columns([1, 3])
             with col1:
@@ -319,7 +279,6 @@ elif st.session_state.page == 'plants':
                 st.write(f"**{plant.get('nom_commun', 'N/A')}** (*{plant.get('nom_scientifique', '')}*)")
                 st.caption(f"Saison : {plant.get('saison', 'N/A')}")
                 st.write(plant.get('description_courte', ''))
-        
         if st.button("← Retour aux symptômes"):
             go_to_page('symptoms')
 
@@ -336,7 +295,7 @@ elif st.session_state.page == 'plant_detail':
         st.title(f"🌱 {plant.get('nom_commun', 'Plante')}")
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
         
-        # Image (toujours affichée, avec repli automatique)
+        # Image (toujours affichée)
         image_url = get_wikimedia_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
         st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
         
