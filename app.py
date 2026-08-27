@@ -133,36 +133,49 @@ def get_plant_details(nom_commun, nom_scientifique):
     response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
-def get_wikimedia_image(nom_scientifique):
-    """Récupère une image libre de droits depuis Wikimedia Commons."""
-    try:
-        search_url = "https://commons.wikimedia.org/w/api.php"
-        params = {
-            "action": "query",
-            "list": "search",
-            "srsearch": nom_scientifique,
-            "srnamespace": 6,
-            "format": "json",
-            "srlimit": 1
-        }
-        resp = requests.get(search_url, params=params, timeout=10).json()
-        if 'query' in resp and resp['query']['search']:
-            title = resp['query']['search'][0]['title']
-            image_params = {
+def get_wikimedia_image(nom_scientifique, nom_commun=""):
+    """Récupère une image libre de droits depuis Wikimedia Commons, avec repli sur le nom commun."""
+    # Essaie d'abord avec le nom scientifique
+    urls = []
+    if nom_scientifique:
+        urls.append(nom_scientifique)
+    if nom_commun:
+        urls.append(nom_commun)
+        # Ajoute aussi la recherche avec "plante" ou "herbe" pour élargir
+        urls.append(nom_commun + " plante")
+        urls.append(nom_commun + " herbe")
+
+    for query in urls:
+        try:
+            search_url = "https://commons.wikimedia.org/w/api.php"
+            params = {
                 "action": "query",
-                "titles": title,
-                "prop": "imageinfo",
-                "iiprop": "url",
-                "format": "json"
+                "list": "search",
+                "srsearch": query,
+                "srnamespace": 6,
+                "format": "json",
+                "srlimit": 1
             }
-            image_resp = requests.get("https://commons.wikimedia.org/w/api.php", params=image_params, timeout=10).json()
-            pages = image_resp['query']['pages']
-            for page in pages.values():
-                if 'imageinfo' in page:
-                    return page['imageinfo'][0]['url']
-    except:
-        pass
-    return None
+            resp = requests.get(search_url, params=params, timeout=10).json()
+            if 'query' in resp and resp['query']['search']:
+                title = resp['query']['search'][0]['title']
+                image_params = {
+                    "action": "query",
+                    "titles": title,
+                    "prop": "imageinfo",
+                    "iiprop": "url",
+                    "format": "json"
+                }
+                image_resp = requests.get("https://commons.wikimedia.org/w/api.php", params=image_params, timeout=10).json()
+                pages = image_resp['query']['pages']
+                for page in pages.values():
+                    if 'imageinfo' in page:
+                        return page['imageinfo'][0]['url']
+        except:
+            continue
+
+    # Image de remplacement générique (plante verte)
+    return "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Flower_icon.svg/512px-Flower_icon.svg.png"
 
 # ------------------------------
 # Listes de pays et symptômes
