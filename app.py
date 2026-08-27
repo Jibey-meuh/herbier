@@ -53,7 +53,7 @@ def get_location_suggestions(partial_name):
     Exemple : ["France", "Finlande", "Fidji"].
     Si peu de correspondances, renvoie moins de 5."""
     user = f"Saisie partielle : {partial_name}"
-    response = ask_groq(system, user, model="llama-3.1-8b-instant", max_tokens=200)
+    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=200)
     if response:
         suggestions = extract_json(response)
         if suggestions and isinstance(suggestions, list):
@@ -77,7 +77,7 @@ def search_plants(location, maux):
     Si aucune, renvoie [].
     """
     user = f"Date d'aujourd'hui : {today}\nLieu : {location}\nMaux : {', '.join(maux)}"
-    response = ask_groq(system, user, model="llama-3.1-70b-versatile", max_tokens=800)
+    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=800)
     if response:
         plants = extract_json(response)
         if plants is not None and isinstance(plants, list):
@@ -100,7 +100,7 @@ def get_plant_details(nom_commun, nom_scientifique):
     - **Liens utiles** : deux liens vers des sites de référence en phytothérapie (par exemple Wikipédia, PasseportSanté). Fournis des URLs complètes et fonctionnelles.
     Utilise un ton professionnel et accessible."""
     user = f"Nom commun : {nom_commun}\nNom scientifique : {nom_scientifique}"
-    response = ask_groq(system, user, model="llama-3.1-70b-versatile", max_tokens=1500)
+    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=1500)
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique):
