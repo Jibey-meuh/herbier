@@ -40,6 +40,10 @@ def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temper
                 temperature=temperature,
                 max_tokens=max_tokens
             )
+            return response.choices[0].message.content
+        except:
+            st.error(f"Erreur API Groq : {e}")
+            return None
 
 def extract_json(text):
     """Extrait le premier bloc JSON d'un texte."""
