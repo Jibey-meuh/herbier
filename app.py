@@ -63,34 +63,44 @@ def ask_groq(system_prompt, user_prompt, model=None, temperature=0.7, max_tokens
     return None
 
 def extract_json(text):
-    """Extrait le premier bloc JSON d'un texte."""
+    """Extrait le premier bloc JSON d'un texte, même avec du texte autour."""
     if not text:
         return None
-    start = text.find('[')
-    end = text.rfind(']')
-    if start != -1 and end != -1 and end > start:
-        json_str = text[start:end+1]
+    # Essaie de trouver un tableau JSON entre [ et ]
+    match = re.search(r'\[.*\]', text, re.DOTALL)
+    if match:
+        json_str = match.group(0)
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
-            return None
+            # Essaie de corriger les virgules manquantes ou guillemets simples
+            try:
+                json_str_clean = json_str.replace("'", '"')
+                return json.loads(json_str_clean)
+            except:
+                pass
     return None
 
 def search_plants(country, maux):
-    """Recherche 5 plantes médicinales adaptées au pays, aux maux et à la saison actuelle."""
+    """Recherche 5 plantes médicinales adaptées au pays, aux maux, en priorité de saison."""
     today = datetime.now().strftime("%d/%m/%Y")
     system = """Tu es un expert en phytothérapie et botanique.
     L'utilisateur indique un pays et une liste de maux.
-    Tu dois déterminer la saison actuelle dans ce pays à la date donnée, puis identifier exactement 5 plantes médicinales qui :
-    - poussent ou sont récoltées dans ce pays pendant cette saison,
-    - sont traditionnellement utilisées pour les maux indiqués.
+    Tu dois proposer EXACTEMENT 5 plantes médicinales qui peuvent aider pour ces maux et qui sont disponibles ou courantes dans ce pays.
+    - En priorité, choisis des plantes qui sont en saison de récolte ou de disponibilité à la date donnée.
+    - Si tu ne trouves pas 5 plantes de saison, complète avec des plantes très courantes dans ce pays qui peuvent aider, même si elles ne sont pas actuellement en saison (par exemple plantes séchées, plantes vivaces, plantes cultivées, etc.).
+    - Assure-toi d'avoir exactement 5 plantes. Si tu ne peux vraiment pas en trouver 5, renvoie au moins 3 plantes courantes, mais fais de ton mieux pour 5.
     Réponds UNIQUEMENT avec un tableau JSON d'objets, chaque objet ayant les clés :
     - "nom_commun" (string)
     - "nom_scientifique" (string)
-    - "saison" (string : la saison de récolte ou de disponibilité)
+    - "saison" (string : la saison de récolte ou "toute l'année")
     - "description_courte" (string : une phrase)
-    Si tu ne trouves pas 5 plantes, renvoie celles que tu as, mais essaie d'en trouver 5.
-    Si aucune, renvoie [].
+    Exemple de format :
+    [
+        {"nom_commun": "Camomille", "nom_scientifique": "Matricaria chamomilla", "saison": "printemps, été", "description_courte": "Apaisante et digestive."},
+        ...
+    ]
+    Ne mets aucun texte avant ou après le JSON.
     """
     user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
     response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=800)
@@ -101,7 +111,11 @@ def search_plants(country, maux):
             for p in plants:
                 if isinstance(p, dict) and all(k in p for k in ["nom_commun", "nom_scientifique", "saison", "description_courte"]):
                     valid_plants.append(p)
+            # Limiter à 5
             return valid_plants[:5]
+        else:
+            # Afficher la réponse brute pour debug (à retirer en prod)
+            st.write("Réponse brute de Groq :", response)
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
