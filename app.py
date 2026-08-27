@@ -320,7 +320,7 @@ elif st.session_state.page == 'plant_detail':
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
         
         # Image (toujours affichée)
-        image_url = get_wikimedia_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
+       image_url = get_plant_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
         st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
         
         # Fiche détaillée
