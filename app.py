@@ -5,6 +5,7 @@ import json
 import re
 from datetime import datetime
 from bs4 import BeautifulSoup
+from io import BytesIO
 
 # Configuration de la page
 st.set_page_config(page_title="Herbier médicinal intelligent", layout="wide")
@@ -42,14 +43,12 @@ def extract_json(text):
     """Extrait le premier bloc JSON d'un texte, même avec du texte autour."""
     if not text:
         return None
-    # Essaie de trouver un tableau JSON entre [ et ]
     match = re.search(r'\[.*\]', text, re.DOTALL)
     if match:
         json_str = match.group(0)
         try:
             return json.loads(json_str)
         except json.JSONDecodeError:
-            # Essaie de corriger les virgules manquantes ou guillemets simples
             try:
                 json_str_clean = json_str.replace("'", '"')
                 return json.loads(json_str_clean)
@@ -64,18 +63,13 @@ def search_plants(country, maux):
     L'utilisateur indique un pays et une liste de maux.
     Tu dois proposer EXACTEMENT 5 plantes médicinales qui peuvent aider pour ces maux et qui sont disponibles ou courantes dans ce pays.
     - En priorité, choisis des plantes qui sont en saison de récolte ou de disponibilité à la date donnée.
-    - Si tu ne trouves pas 5 plantes de saison, complète avec des plantes très courantes dans ce pays qui peuvent aider, même si elles ne sont pas actuellement en saison (par exemple plantes séchées, plantes vivaces, plantes cultivées, etc.).
+    - Si tu ne trouves pas 5 plantes de saison, complète avec des plantes très courantes dans ce pays qui peuvent aider, même si elles ne sont pas actuellement en saison.
     - Assure-toi d'avoir exactement 5 plantes. Si tu ne peux vraiment pas en trouver 5, renvoie au moins 3 plantes courantes, mais fais de ton mieux pour 5.
     Réponds UNIQUEMENT avec un tableau JSON d'objets, chaque objet ayant les clés :
     - "nom_commun" (string)
     - "nom_scientifique" (string)
     - "saison" (string : la saison de récolte ou "toute l'année")
     - "description_courte" (string : une phrase)
-    Exemple de format :
-    [
-        {"nom_commun": "Camomille", "nom_scientifique": "Matricaria chamomilla", "saison": "printemps, été", "description_courte": "Apaisante et digestive."},
-        ...
-    ]
     Ne mets aucun texte avant ou après le JSON.
     """
     user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
@@ -89,12 +83,13 @@ def search_plants(country, maux):
                     valid_plants.append(p)
             return valid_plants[:5]
         else:
-            # Afficher la réponse brute pour debug (peut être retiré en prod)
-            st.write("Réponse brute de Groq :", response)
+            # Debug : afficher la réponse brute si le JSON est invalide
+            # st.write("Réponse brute de Groq :", response)
+            pass
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
-    """Génère une fiche détaillée pour une plante donnée, avec liens en premier."""
+    """Génère une fiche détaillée avec liens en premier."""
     system = f"""Tu es un botaniste et phytothérapeute expérimenté.
 Fournis une fiche complète sur la plante indiquée, structurée en Markdown.
 **IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens.
@@ -103,7 +98,7 @@ Le deuxième lien vers un autre site de référence en phytothérapie (Wikipédi
 Chaque lien sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
 Ensuite, ajoute les sections dans cet ordre :
 - **Description botanique** : 2-3 phrases.
-- **Effets bénéfiques** : liste à puces des propriétés médicinales.
+- **Effets bénéfiques** : liste à puces.
 - **Meilleure façon d'extraire soi-même ses principes actifs** : instructions précises.
 - **Saisons de récolte**.
 - **Précautions d'emploi**.
@@ -112,8 +107,19 @@ Utilise un ton professionnel et accessible."""
     response = ask_groq(system, user, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
+def download_image(url):
+    """Télécharge l'image et retourne les bytes si le content-type est image/*."""
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        resp = requests.get(url, headers=headers, timeout=10)
+        if resp.status_code == 200 and resp.headers.get('content-type', '').startswith('image/'):
+            return resp.content
+    except:
+        pass
+    return None
+
 def get_plant_image(nom_scientifique, nom_commun=""):
-    """Récupère l'image depuis Wikiphyto, puis Openverse, puis Wikipedia."""
+    """Récupère l'image de la plante (bytes) depuis plusieurs sources."""
     def try_wikiphyto(query):
         slug = query.replace(" ", "_")
         url = f"https://www.wikiphyto.org/wiki/{slug}"
@@ -126,7 +132,7 @@ def get_plant_image(nom_scientifique, nom_commun=""):
                     src = img['src']
                     if src.startswith('//'):
                         src = 'https:' + src
-                    return src
+                    return download_image(src)
         except:
             pass
         return None
@@ -138,7 +144,9 @@ def get_plant_image(nom_scientifique, nom_commun=""):
             resp = requests.get(url, params=params, timeout=8).json()
             results = resp.get("results", [])
             if results:
-                return results[0].get("url")
+                img_url = results[0].get("url")
+                if img_url:
+                    return download_image(img_url)
         except:
             pass
         return None
@@ -152,24 +160,22 @@ def get_plant_image(nom_scientifique, nom_commun=""):
                 pages = resp.get("query", {}).get("pages", {})
                 for page in pages.values():
                     if "thumbnail" in page:
-                        return page["thumbnail"]["source"]
+                        return download_image(page["thumbnail"]["source"])
             except:
                 continue
         return None
 
-    # 1. Wikiphyto avec nom commun
+    # 1. Wikiphyto
     if nom_commun:
         img = try_wikiphyto(nom_commun)
         if img:
             return img
-
-    # 2. Wikiphyto avec nom scientifique
     if nom_scientifique:
         img = try_wikiphyto(nom_scientifique)
         if img:
             return img
 
-    # 3. Openverse
+    # 2. Openverse
     if nom_scientifique:
         img = try_openverse(nom_scientifique)
         if img:
@@ -179,7 +185,7 @@ def get_plant_image(nom_scientifique, nom_commun=""):
         if img:
             return img
 
-    # 4. Wikipedia
+    # 3. Wikipedia
     if nom_scientifique:
         img = try_wikipedia(nom_scientifique)
         if img:
@@ -189,8 +195,8 @@ def get_plant_image(nom_scientifique, nom_commun=""):
         if img:
             return img
 
-    # 5. Image de secours
-    return "https://placehold.co/400x300.png?text=Plante+médicinale"
+    # 4. Image de secours : une petite image générée localement
+    return None
 
 # ------------------------------
 # Listes de pays et symptômes
@@ -337,9 +343,12 @@ elif st.session_state.page == 'plant_detail':
         st.title(f"🌱 {plant.get('nom_commun', 'Plante')}")
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
         
-        # Image (toujours affichée)
-        image_url = get_plant_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
-        st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
+        # Image : téléchargée en bytes
+        image_bytes = get_plant_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
+        if image_bytes:
+            st.image(image_bytes, width=400, caption=plant.get('nom_commun', ''))
+        else:
+            st.write("Image non disponible pour cette plante.")
         
         # Fiche détaillée
         with st.spinner("Génération de la fiche détaillée..."):
