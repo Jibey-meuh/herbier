@@ -93,13 +93,15 @@ def search_plants(country, maux):
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
-    """Génère une fiche détaillée pour une plante donnée, avec liens en premier."""
-    system = """Tu es un botaniste et phytothérapeute expérimenté.
+    system = f"""Tu es un botaniste et phytothérapeute expérimenté.
 Fournis une fiche complète sur la plante indiquée, structurée en Markdown.
-**IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens vers des sites de phytothérapie réputés (par exemple Wikipédia, PasseportSanté, Doctissimo, etc.). Chaque lien doit être sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
-Ensuite, ajoute les sections suivantes dans cet ordre :
+**IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens.
+Le premier lien doit être vers la page Wikiphyto de la plante : https://www.wikiphyto.org/wiki/{nom_commun.replace(' ', '_')}
+Le deuxième lien vers un autre site de référence en phytothérapie (Wikipédia, PasseportSanté, etc.).
+Chaque lien sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
+Ensuite, ajoute les sections dans cet ordre :
 - **Description botanique** : 2-3 phrases.
-- **Effets bénéfiques** : liste à puces des propriétés médicinales.
+- **Effets bénéfiques** : liste à puces.
 - **Meilleure façon d'extraire soi-même ses principes actifs** : instructions précises.
 - **Saisons de récolte**.
 - **Précautions d'emploi**.
