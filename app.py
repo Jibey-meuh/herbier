@@ -24,25 +24,21 @@ MODELES = [
 # ------------------------------
 
 def ask_groq(system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=1500):
-    """Envoie une requête à l'API Groq en essayant plusieurs modèles."""
-    models_to_try = [model] if model else MODELES
-    last_error = None
-    
-    for m in models_to_try:
-        try:
-            response = client.chat.completions.create(
-                model=m,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt}
-                ],
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-            return response.choices[0].message.content
-        except Exception as e:
-            last_error = e
-            continue
+    """Envoie une requête à l'API Groq."""
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",  # Le modèle le plus stable actuellement
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        st.error(f"Erreur API Groq : {e}")
+        return None
     
     # Si tous échouent, afficher l'erreur
     if last_error:
