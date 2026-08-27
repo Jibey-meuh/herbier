@@ -109,7 +109,6 @@ Utilise un ton professionnel et accessible."""
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique, nom_commun=""):
-    """Récupère une image libre de droits depuis Wikimedia Commons, avec repli."""
     urls = []
     if nom_scientifique:
         urls.append(nom_scientifique)
@@ -147,8 +146,8 @@ def get_wikimedia_image(nom_scientifique, nom_commun=""):
         except:
             continue
 
-    # Image de remplacement générique
-    return "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Flower_icon.svg/512px-Flower_icon.svg.png"
+    # Image de remplacement fiable
+    return "https://placehold.co/400x300.png?text=Plante+médicinale"
 
 # ------------------------------
 # Listes de pays et symptômes
