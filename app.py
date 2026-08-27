@@ -29,8 +29,17 @@ def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temper
         )
         return response.choices[0].message.content
     except Exception as e:
-        st.error(f"Erreur API Groq : {e}")
-        return None
+        # Fallback si le modèle principal échoue
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.2-3b-preview",  # Modèle de secours
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
 
 def extract_json(text):
     """Extrait le premier bloc JSON d'un texte."""
