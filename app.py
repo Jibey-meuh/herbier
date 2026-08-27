@@ -11,28 +11,28 @@ st.set_page_config(page_title="Herbier médicinal intelligent", layout="wide")
 # Initialisation du client Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
+# Liste des modèles à essayer dans l'ordre (du plus performant au plus simple)
+MODELES = [
+    "llama-3.1-8b-instant",
+    "llama-3.2-3b-preview",
+    "llama-3.2-1b-preview",
+    "mixtral-8x7b-32768",
+    "gemma2-9b-it"
+]
+
 # ------------------------------
 # Fonctions utilitaires
 # ------------------------------
 
-def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temperature=0.7, max_tokens=1500):
-    """Envoie une requête à l'API Groq et retourne la réponse texte."""
-    try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        # Fallback sur un modèle alternatif
+def ask_groq(system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=1500):
+    """Envoie une requête à l'API Groq en essayant plusieurs modèles."""
+    models_to_try = [model] if model else MODELES
+    last_error = None
+    
+    for m in models_to_try:
         try:
             response = client.chat.completions.create(
-                model="llama-3.2-3b-preview",
+                model=m,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -41,9 +41,14 @@ def ask_groq(system_prompt, user_prompt, model="llama-3.3-70b-versatile", temper
                 max_tokens=max_tokens
             )
             return response.choices[0].message.content
-        except:
-            st.error(f"Erreur API Groq : {e}")
-            return None
+        except Exception as e:
+            last_error = e
+            continue
+    
+    # Si tous échouent, afficher l'erreur
+    if last_error:
+        st.error(f"Erreur API Groq : {last_error}")
+    return None
 
 def extract_json(text):
     """Extrait le premier bloc JSON d'un texte."""
@@ -76,7 +81,7 @@ def search_plants(country, maux):
     Si aucune, renvoie [].
     """
     user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
-    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=800)
+    response = ask_groq(system, user, max_tokens=800)
     if response:
         plants = extract_json(response)
         if plants is not None and isinstance(plants, list):
@@ -99,7 +104,7 @@ def get_plant_details(nom_commun, nom_scientifique):
     - **Liens utiles** : deux liens vers des sites de référence en phytothérapie (par exemple Wikipédia, PasseportSanté). Fournis des URLs complètes et fonctionnelles.
     Utilise un ton professionnel et accessible."""
     user = f"Nom commun : {nom_commun}\nNom scientifique : {nom_scientifique}"
-    response = ask_groq(system, user, model="llama-3.3-70b-versatile", max_tokens=1500)
+    response = ask_groq(system, user, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique):
@@ -218,7 +223,6 @@ if st.session_state.page == 'search':
     st.title("🌿 Herbier médicinal intelligent")
     st.markdown("### Étape 1 : Dans quel pays vous trouvez-vous ?")
     
-    # Liste déroulante des pays
     country = st.selectbox("Sélectionnez un pays", PAYS, index=0)
     
     if st.button("Continuer ➜", type="primary"):
