@@ -121,27 +121,26 @@ def search_plants(country, maux):
 def get_plant_details(nom_commun, nom_scientifique):
     """Génère une fiche détaillée pour une plante donnée."""
     system = """Tu es un botaniste et phytothérapeute expérimenté.
-    Fournis une fiche complète sur la plante indiquée, structurée en Markdown, contenant :
-    - **Description botanique** : 2-3 phrases.
-    - **Effets bénéfiques** : liste à puces des propriétés médicinales.
-    - **Meilleure façon d'extraire soi-même ses principes actifs** : instructions précises (infusion, décoction, teinture, cataplasme, etc.).
-    - **Saisons de récolte** : quand récolter la plante.
-    - **Précautions d'emploi** : contre-indications éventuelles.
-    - **Liens utiles** : deux liens vers des sites de référence en phytothérapie (par exemple Wikipédia, PasseportSanté). Fournis des URLs complètes et fonctionnelles.
-    Utilise un ton professionnel et accessible."""
+Fournis une fiche complète sur la plante indiquée, structurée en Markdown.
+**IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens vers des sites de phytothérapie réputés (par exemple Wikipédia, PasseportSanté, Doctissimo, etc.). Chaque lien doit être sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
+Ensuite, ajoute les sections suivantes dans cet ordre :
+- **Description botanique** : 2-3 phrases.
+- **Effets bénéfiques** : liste à puces des propriétés médicinales.
+- **Meilleure façon d'extraire soi-même ses principes actifs** : instructions précises.
+- **Saisons de récolte**.
+- **Précautions d'emploi**.
+Utilise un ton professionnel et accessible."""
     user = f"Nom commun : {nom_commun}\nNom scientifique : {nom_scientifique}"
     response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique, nom_commun=""):
     """Récupère une image libre de droits depuis Wikimedia Commons, avec repli sur le nom commun."""
-    # Essaie d'abord avec le nom scientifique
     urls = []
     if nom_scientifique:
         urls.append(nom_scientifique)
     if nom_commun:
         urls.append(nom_commun)
-        # Ajoute aussi la recherche avec "plante" ou "herbe" pour élargir
         urls.append(nom_commun + " plante")
         urls.append(nom_commun + " herbe")
 
@@ -174,7 +173,7 @@ def get_wikimedia_image(nom_scientifique, nom_commun=""):
         except:
             continue
 
-    # Image de remplacement générique (plante verte)
+    # Image de remplacement générique
     return "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/Flower_icon.svg/512px-Flower_icon.svg.png"
 
 # ------------------------------
@@ -337,12 +336,9 @@ elif st.session_state.page == 'plant_detail':
         st.title(f"🌱 {plant.get('nom_commun', 'Plante')}")
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
         
-        # Image
-        image_url = get_wikimedia_image(plant.get('nom_scientifique', ''))
-        if image_url:
-            st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
-        else:
-            st.write("Image non disponible pour cette plante.")
+        # Image (toujours affichée, avec repli automatique)
+        image_url = get_wikimedia_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
+        st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
         
         # Fiche détaillée
         with st.spinner("Génération de la fiche détaillée..."):
