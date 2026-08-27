@@ -11,12 +11,25 @@ st.set_page_config(page_title="Herbier médicinal intelligent", layout="wide")
 # Initialisation du client Groq
 client = Groq(api_key=st.secrets["GROQ_API_KEY"])
 
-# Liste des modèles à essayer dans l'ordre (du plus performant au plus simple)
+# ------------------------------
+# Modèles Groq disponibles (selon ta liste)
+# ------------------------------
+# Pour les tâches simples (suggestions, listes)
+MODELE_RAPIDE = "qwen/qwen3.6-27b"
+
+# Pour les tâches complexes (recherche de plantes, fiches détaillées)
+MODELE_PUISSANT = "openai/gpt-oss-120b"
+
+# Modèle de secours
+MODELE_SECOURS = "openai/gpt-oss-20b"
+
+# Liste complète pour essai en cascade
 MODELES = [
-    "llama-3.1-8b-instant",
-    "llama-3.3-70b-versatile",
-    "llama-3.2-3b-preview",
-    "llama-3.2-1b-preview"
+    MODELE_PUISSANT,
+    MODELE_RAPIDE,
+    MODELE_SECOURS,
+    "qwen/qwen3.8-27b",
+    "allam-2-7b"
 ]
 
 # ------------------------------
@@ -24,21 +37,25 @@ MODELES = [
 # ------------------------------
 
 def ask_groq(system_prompt, user_prompt, model=None, temperature=0.7, max_tokens=1500):
-    """Envoie une requête à l'API Groq."""
-    try:
-        response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",  # Le modèle le plus stable actuellement
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens
-        )
-        return response.choices[0].message.content
-    except Exception as e:
-        st.error(f"Erreur API Groq : {e}")
-        return None
+    """Envoie une requête à l'API Groq en essayant plusieurs modèles."""
+    models_to_try = [model] if model else MODELES
+    last_error = None
+    
+    for m in models_to_try:
+        try:
+            response = client.chat.completions.create(
+                model=m,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            last_error = e
+            continue
     
     # Si tous échouent, afficher l'erreur
     if last_error:
@@ -76,7 +93,7 @@ def search_plants(country, maux):
     Si aucune, renvoie [].
     """
     user = f"Date d'aujourd'hui : {today}\nPays : {country}\nMaux : {', '.join(maux)}"
-    response = ask_groq(system, user, max_tokens=800)
+    response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=800)
     if response:
         plants = extract_json(response)
         if plants is not None and isinstance(plants, list):
@@ -99,7 +116,7 @@ def get_plant_details(nom_commun, nom_scientifique):
     - **Liens utiles** : deux liens vers des sites de référence en phytothérapie (par exemple Wikipédia, PasseportSanté). Fournis des URLs complètes et fonctionnelles.
     Utilise un ton professionnel et accessible."""
     user = f"Nom commun : {nom_commun}\nNom scientifique : {nom_scientifique}"
-    response = ask_groq(system, user, max_tokens=1500)
+    response = ask_groq(system, user, model=MODELE_PUISSANT, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
 def get_wikimedia_image(nom_scientifique):
