@@ -4,6 +4,7 @@ import requests
 import json
 import re
 from datetime import datetime
+from bs4 import BeautifulSoup
 
 # Configuration de la page
 st.set_page_config(page_title="Herbier médicinal intelligent", layout="wide")
@@ -93,6 +94,7 @@ def search_plants(country, maux):
     return []
 
 def get_plant_details(nom_commun, nom_scientifique):
+    """Génère une fiche détaillée pour une plante donnée, avec liens en premier."""
     system = f"""Tu es un botaniste et phytothérapeute expérimenté.
 Fournis une fiche complète sur la plante indiquée, structurée en Markdown.
 **IMPORTANT** : La fiche doit commencer par une section intitulée **Liens utiles** contenant exactement deux liens.
@@ -101,7 +103,7 @@ Le deuxième lien vers un autre site de référence en phytothérapie (Wikipédi
 Chaque lien sur une ligne séparée, sous forme de liste à puces avec le nom du site et l'URL complète.
 Ensuite, ajoute les sections dans cet ordre :
 - **Description botanique** : 2-3 phrases.
-- **Effets bénéfiques** : liste à puces.
+- **Effets bénéfiques** : liste à puces des propriétés médicinales.
 - **Meilleure façon d'extraire soi-même ses principes actifs** : instructions précises.
 - **Saisons de récolte**.
 - **Précautions d'emploi**.
@@ -113,7 +115,6 @@ Utilise un ton professionnel et accessible."""
 def get_plant_image(nom_scientifique, nom_commun=""):
     """Récupère l'image depuis Wikiphyto, puis Openverse, puis Wikipedia."""
     def try_wikiphyto(query):
-        # Construit l'URL probable de la page Wikiphyto
         slug = query.replace(" ", "_")
         url = f"https://www.wikiphyto.org/wiki/{slug}"
         try:
@@ -131,7 +132,6 @@ def get_plant_image(nom_scientifique, nom_commun=""):
         return None
 
     def try_openverse(query):
-        # comme avant
         try:
             url = "https://api.openverse.org/v1/images/"
             params = {"q": query, "license_type": "commercial", "per_page": 1}
@@ -144,7 +144,6 @@ def get_plant_image(nom_scientifique, nom_commun=""):
         return None
 
     def try_wikipedia(query):
-        # comme avant
         for lang in ["fr", "en"]:
             try:
                 url = f"https://{lang}.wikipedia.org/w/api.php"
@@ -158,13 +157,13 @@ def get_plant_image(nom_scientifique, nom_commun=""):
                 continue
         return None
 
-    # 1. Wikiphyto avec nom commun (le plus pertinent pour ce site)
+    # 1. Wikiphyto avec nom commun
     if nom_commun:
         img = try_wikiphyto(nom_commun)
         if img:
             return img
 
-    # 2. Wikiphyto avec nom scientifique (parfois présent)
+    # 2. Wikiphyto avec nom scientifique
     if nom_scientifique:
         img = try_wikiphyto(nom_scientifique)
         if img:
@@ -339,7 +338,7 @@ elif st.session_state.page == 'plant_detail':
         st.subheader(f"*{plant.get('nom_scientifique', '')}*")
         
         # Image (toujours affichée)
-       image_url = get_plant_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
+        image_url = get_plant_image(plant.get('nom_scientifique', ''), plant.get('nom_commun', ''))
         st.image(image_url, width=400, caption=plant.get('nom_commun', ''))
         
         # Fiche détaillée
