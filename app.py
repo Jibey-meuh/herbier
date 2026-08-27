@@ -108,85 +108,70 @@ Utilise un ton professionnel et accessible."""
     response = ask_groq(system, user, max_tokens=1500)
     return response if response else "Fiche non disponible."
 
-def get_wikimedia_image(nom_scientifique, nom_commun=""):
-    """Récupère l'image de la plante via Wikipedia, avec repli sur Commons."""
-    def try_wikipedia(query):
+def get_plant_image(nom_scientifique, nom_commun=""):
+    """Récupère l'image d'une plante via Openverse puis Wikipedia."""
+    def try_openverse(query):
         try:
-            # API Wikipedia pour obtenir l'image principale
-            url = "https://fr.wikipedia.org/w/api.php"
+            url = "https://api.openverse.org/v1/images/"
             params = {
-                "action": "query",
-                "titles": query,
-                "prop": "pageimages",
-                "format": "json",
-                "pithumbsize": 500
+                "q": query,
+                "license_type": "commercial",  # images réutilisables
+                "per_page": 1,
+                "page": 1
             }
-            resp = requests.get(url, params=params, timeout=10).json()
-            pages = resp.get("query", {}).get("pages", {})
-            for page in pages.values():
-                if "thumbnail" in page:
-                    return page["thumbnail"]["source"]
+            resp = requests.get(url, params=params, timeout=8).json()
+            results = resp.get("results", [])
+            if results:
+                return results[0].get("url")
         except:
             pass
         return None
 
-    # 1. Essayer avec le nom scientifique (page exacte)
+    def try_wikipedia(query):
+        for lang in ["fr", "en"]:
+            try:
+                url = f"https://{lang}.wikipedia.org/w/api.php"
+                params = {
+                    "action": "query",
+                    "titles": query,
+                    "prop": "pageimages",
+                    "format": "json",
+                    "pithumbsize": 500
+                }
+                resp = requests.get(url, params=params, timeout=8).json()
+                pages = resp.get("query", {}).get("pages", {})
+                for page in pages.values():
+                    if "thumbnail" in page:
+                        return page["thumbnail"]["source"]
+            except:
+                continue
+        return None
+
+    # 1. Openverse avec nom scientifique
+    if nom_scientifique:
+        img = try_openverse(nom_scientifique)
+        if img:
+            return img
+
+    # 2. Openverse avec nom commun
+    if nom_commun:
+        img = try_openverse(nom_commun)
+        if img:
+            return img
+
+    # 3. Wikipedia (FR puis EN) avec nom scientifique
     if nom_scientifique:
         img = try_wikipedia(nom_scientifique)
         if img:
             return img
 
-    # 2. Essayer avec le nom commun
+    # 4. Wikipedia avec nom commun
     if nom_commun:
         img = try_wikipedia(nom_commun)
         if img:
             return img
 
-    # 3. Essayer avec nom commun + " (plante)"
-    if nom_commun:
-        img = try_wikipedia(nom_commun + " (plante)")
-        if img:
-            return img
-
-    # 4. Repli : recherche sur Commons (ancienne méthode)
-    urls = []
-    if nom_scientifique:
-        urls.append(nom_scientifique)
-    if nom_commun:
-        urls.append(nom_commun)
-        urls.append(nom_commun + " plante")
-        urls.append(nom_commun + " herbe")
-
-    for query in urls:
-        try:
-            search_url = "https://commons.wikimedia.org/w/api.php"
-            params = {
-                "action": "query",
-                "list": "search",
-                "srsearch": query,
-                "srnamespace": 6,
-                "format": "json",
-                "srlimit": 1
-            }
-            resp = requests.get(search_url, params=params, timeout=10).json()
-            if 'query' in resp and resp['query']['search']:
-                title = resp['query']['search'][0]['title']
-                image_params = {
-                    "action": "query",
-                    "titles": title,
-                    "prop": "imageinfo",
-                    "iiprop": "url",
-                    "format": "json"
-                }
-                image_resp = requests.get("https://commons.wikimedia.org/w/api.php", params=image_params, timeout=10).json()
-                pages = image_resp['query']['pages']
-                for page in pages.values():
-                    if 'imageinfo' in page:
-                        return page['imageinfo'][0]['url']
-        except:
-            continue
-
-    # 5. Placeholder final
+    # 5. Image de secours
     return "https://placehold.co/400x300.png?text=Plante+médicinale"
 
 # ------------------------------
